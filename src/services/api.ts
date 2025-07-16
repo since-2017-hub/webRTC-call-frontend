@@ -1,5 +1,6 @@
 import axios from "axios";
-const API_BASE_URL = `${process.env.VITE_API_URL}/api`;
+
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export interface User {
   id: string;
@@ -15,26 +16,23 @@ export interface LoginResponse {
 
 export const api = {
   login: async (username: string, password: string): Promise<LoginResponse> => {
-    const response = await axios.post(
-      `${API_BASE_URL}/login`,
-      { username: username, password: password },
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        withCredentials: false,
-      }
-    );
-
-    // if (!response.ok) {
-    //   throw new Error("Login failed");
-    // }
-    console.log(response);
-    return response.data;
+    const response = await fetch(`${API_BASE_URL}/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Login failed');
+    }
+    
+    return response.json();
   },
-
+  
   getUsers: async (): Promise<User[]> => {
-    const response = await axios.get(`${API_BASE_URL}/users`);
-    return response.data;
+    const response = await fetch(`${API_BASE_URL}/users`);
+    return response.json();
   },
 };
