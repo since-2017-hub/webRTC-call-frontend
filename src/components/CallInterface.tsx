@@ -20,6 +20,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isRemoteAudioMuted, setIsRemoteAudioMuted] = useState(false);
@@ -27,76 +28,139 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   const [hasLocalVideo, setHasLocalVideo] = useState(false);
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
   const [hasRemoteAudio, setHasRemoteAudio] = useState(false);
+  const [audioPlaying, setAudioPlaying] = useState(false);
   
-  // Set up local video
+  // Set up local video stream
   useEffect(() => {
     if (localStream && localVideoRef.current) {
+      console.log('📹 Setting up local video stream');
+      
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.muted = true; // Always mute local video to prevent feedback
+      localVideoRef.current.autoplay = true;
+      localVideoRef.current.playsInline = true;
       
       const videoTracks = localStream.getVideoTracks();
+      const audioTracks = localStream.getAudioTracks();
+      
       setHasLocalVideo(videoTracks.length > 0 && videoTracks[0].enabled);
       
-      console.log('📹 Local video stream set:', {
-        videoTracks: videoTracks.length,
-        audioTracks: localStream.getAudioTracks().length
-      });
-    }
-  }, [localStream]);
-  
-  // Set up remote video and audio
-  useEffect(() => {
-    if (remoteStream) {
-      const videoTracks = remoteStream.getVideoTracks();
-      const audioTracks = remoteStream.getAudioTracks();
-      
-      setHasRemoteVideo(videoTracks.length > 0 && videoTracks[0].enabled);
-      setHasRemoteAudio(audioTracks.length > 0 && audioTracks[0].enabled);
-      
-      console.log('🎵 Remote stream received:', {
+      console.log('📊 Local stream setup:', {
         videoTracks: videoTracks.length,
         audioTracks: audioTracks.length,
         videoEnabled: videoTracks[0]?.enabled,
         audioEnabled: audioTracks[0]?.enabled
       });
+
+      // Handle video load
+      localVideoRef.current.onloadedmetadata = () => {
+        console.log('📺 Local video metadata loaded');
+        localVideoRef.current?.play().catch(error => {
+          console.error('❌ Error playing local video:', error);
+        });
+      };
+    }
+  }, [localStream]);
+  
+  // Set up remote stream (CRITICAL for audio/video)
+  useEffect(() => {
+    if (remoteStream) {
+      console.log('🎵 Setting up remote stream:', {
+        id: remoteStream.id,
+        active: remoteStream.active,
+        audioTracks: remoteStream.getAudioTracks().length,
+        videoTracks: remoteStream.getVideoTracks().length
+      });
       
-      // Set up video element for video calls
-      if (callType === 'video' && remoteVideoRef.current) {
+      const videoTracks = remoteStream.getVideoTracks();
+      const audioTracks = remoteStream.getAudioTracks();
+      
+      // Update state based on available tracks
+      setHasRemoteVideo(videoTracks.length > 0 && videoTracks[0].enabled);
+      setHasRemoteAudio(audioTracks.length > 0 && audioTracks[0].enabled);
+      
+      // Set up remote video element
+      if (remoteVideoRef.current) {
+        console.log('📺 Setting up remote video element');
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.autoplay = true;
         remoteVideoRef.current.playsInline = true;
-        remoteVideoRef.current.muted = false; // Enable audio in video element
+        remoteVideoRef.current.muted = false; // Don't mute remote video - we want audio
         
         remoteVideoRef.current.onloadedmetadata = () => {
           console.log('📺 Remote video metadata loaded');
-          remoteVideoRef.current?.play().catch(error => {
+          remoteVideoRef.current?.play().then(() => {
+            console.log('✅ Remote video playing successfully');
+          }).catch(error => {
             console.error('❌ Error playing remote video:', error);
           });
         };
+
+        remoteVideoRef.current.onplay = () => {
+          console.log('▶️ Remote video started playing');
+        };
+
+        remoteVideoRef.current.onpause = () => {
+          console.log('⏸️ Remote video paused');
+        };
       }
       
-      // Set up dedicated audio element for better audio handling
+      // Set up dedicated remote audio element for better audio control
       if (remoteAudioRef.current) {
+        console.log('🔊 Setting up remote audio element');
         remoteAudioRef.current.srcObject = remoteStream;
         remoteAudioRef.current.autoplay = true;
         remoteAudioRef.current.volume = 1.0;
         remoteAudioRef.current.muted = false;
         
+        // Handle audio events
         remoteAudioRef.current.onloadeddata = () => {
-          console.log('🔊 Remote audio loaded');
+          console.log('🔊 Remote audio data loaded');
+        };
+
+        remoteAudioRef.current.oncanplay = () => {
+          console.log('🔊 Remote audio can play');
           remoteAudioRef.current?.play().then(() => {
             console.log('✅ Remote audio playing successfully');
+            setAudioPlaying(true);
           }).catch(error => {
             console.error('❌ Error playing remote audio:', error);
-            // Try to enable audio on user interaction
-            document.addEventListener('click', () => {
-              remoteAudioRef.current?.play();
-            }, { once: true });
+            // Try to play on user interaction
+            const playAudio = () => {
+              remoteAudioRef.current?.play().then(() => {
+                console.log('✅ Remote audio playing after user interaction');
+                setAudioPlaying(true);
+                document.removeEventListener('click', playAudio);
+              });
+            };
+            document.addEventListener('click', playAudio, { once: true });
           });
+        };
+
+        remoteAudioRef.current.onplay = () => {
+          console.log('▶️ Remote audio started playing');
+          setAudioPlaying(true);
+        };
+
+        remoteAudioRef.current.onpause = () => {
+          console.log('⏸️ Remote audio paused');
+          setAudioPlaying(false);
+        };
+
+        remoteAudioRef.current.onerror = (error) => {
+          console.error('❌ Remote audio error:', error);
         };
       }
       
       // Monitor track states
-      [...videoTracks, ...audioTracks].forEach(track => {
+      [...videoTracks, ...audioTracks].forEach((track, index) => {
+        console.log(`🎵 Track ${index}:`, {
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          label: track.label || 'unlabeled'
+        });
+        
         track.onended = () => {
           console.log(`🔚 Remote ${track.kind} track ended`);
         };
@@ -110,7 +174,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         };
       });
     }
-  }, [remoteStream, callType]);
+  }, [remoteStream]);
   
   // Call duration timer
   useEffect(() => {
@@ -123,9 +187,10 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   
   const toggleMute = () => {
     if (localStream) {
-      localStream.getAudioTracks().forEach(track => {
+      const audioTracks = localStream.getAudioTracks();
+      audioTracks.forEach(track => {
         track.enabled = !track.enabled;
-        console.log('🎤 Local audio', track.enabled ? 'enabled' : 'disabled');
+        console.log(`🎤 Local audio ${track.enabled ? 'enabled' : 'disabled'}`);
       });
       setIsMuted(!isMuted);
     }
@@ -133,24 +198,31 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   
   const toggleVideo = () => {
     if (localStream) {
-      localStream.getVideoTracks().forEach(track => {
+      const videoTracks = localStream.getVideoTracks();
+      videoTracks.forEach(track => {
         track.enabled = !track.enabled;
-        console.log('📹 Local video', track.enabled ? 'enabled' : 'disabled');
+        console.log(`📹 Local video ${track.enabled ? 'enabled' : 'disabled'}`);
       });
       setIsVideoOff(!isVideoOff);
-      setHasLocalVideo(!isVideoOff && localStream.getVideoTracks().length > 0);
+      setHasLocalVideo(!isVideoOff && videoTracks.length > 0);
     }
   };
 
   const toggleRemoteAudio = () => {
+    const newMutedState = !isRemoteAudioMuted;
+    
+    // Mute/unmute both audio and video elements
     if (remoteAudioRef.current) {
-      remoteAudioRef.current.muted = !remoteAudioRef.current.muted;
-      setIsRemoteAudioMuted(!isRemoteAudioMuted);
-      console.log('🔊 Remote audio', remoteAudioRef.current.muted ? 'muted' : 'unmuted');
+      remoteAudioRef.current.muted = newMutedState;
+      console.log(`🔊 Remote audio element ${newMutedState ? 'muted' : 'unmuted'}`);
     }
+    
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.muted = !remoteVideoRef.current.muted;
+      remoteVideoRef.current.muted = newMutedState;
+      console.log(`📺 Remote video element ${newMutedState ? 'muted' : 'unmuted'}`);
     }
+    
+    setIsRemoteAudioMuted(newMutedState);
   };
   
   const formatDuration = (seconds: number) => {
@@ -187,16 +259,17 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   
   return (
     <div className="fixed inset-0 bg-gray-900 z-50">
-      {/* Hidden audio element for better audio handling */}
+      {/* Dedicated audio element for remote audio - CRITICAL for hearing audio */}
       <audio
         ref={remoteAudioRef}
         autoPlay
         playsInline
+        controls={false}
         style={{ display: 'none' }}
       />
       
       <div className="h-full flex flex-col">
-        {/* Header */}
+        {/* Header with debug info */}
         <div className="bg-gray-800 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
@@ -210,16 +283,22 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
           <div className="flex items-center space-x-4">
             <div className="text-white text-sm">
               {callType === 'video' ? 'Video Call' : 'Voice Call'}
-              {!hasRemoteVideo && callType === 'video' && (
-                <span className="text-yellow-400 text-xs ml-2">(Audio Only)</span>
-              )}
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 text-xs">
               {hasRemoteAudio && (
-                <div className="text-green-400 text-xs">🎵 Audio</div>
+                <span className={`px-2 py-1 rounded ${audioPlaying ? 'bg-green-600' : 'bg-yellow-600'} text-white`}>
+                  🎵 {audioPlaying ? 'Audio Playing' : 'Audio Ready'}
+                </span>
               )}
               {hasRemoteVideo && (
-                <div className="text-blue-400 text-xs">📹 Video</div>
+                <span className="px-2 py-1 rounded bg-blue-600 text-white">
+                  📹 Video
+                </span>
+              )}
+              {!hasRemoteAudio && !hasRemoteVideo && (
+                <span className="px-2 py-1 rounded bg-red-600 text-white">
+                  ⚠️ No Media
+                </span>
               )}
             </div>
           </div>
@@ -247,6 +326,9 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                     onCanPlay={() => {
                       console.log('📺 Remote video can play');
                     }}
+                    onPlay={() => {
+                      console.log('▶️ Remote video playing');
+                    }}
                   />
                 ) : (
                   <div className="flex flex-col items-center space-y-4">
@@ -256,6 +338,11 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                       <p className="text-gray-400">
                         {hasRemoteAudio ? 'Camera is off' : 'Connecting...'}
                       </p>
+                      {hasRemoteAudio && (
+                        <p className="text-green-400 text-sm mt-1">
+                          🎵 Audio: {audioPlaying ? 'Playing' : 'Ready'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -271,6 +358,9 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                     muted={true}
                     className="w-full h-full object-cover"
                     style={{ transform: 'scaleX(-1)' }} // Mirror local video
+                    onError={(e) => {
+                      console.error('❌ Local video error:', e);
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
@@ -294,9 +384,15 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 </div>
                 <h3 className="text-white text-xl font-medium mb-2">{otherUser.username}</h3>
                 <p className="text-gray-300">{formatDuration(callDuration)}</p>
-                <p className="text-gray-400 text-sm mt-2">
-                  {hasRemoteAudio ? 'Voice Call Active' : 'Connecting audio...'}
-                </p>
+                <div className="mt-4 space-y-2">
+                  {hasRemoteAudio ? (
+                    <p className={`text-sm ${audioPlaying ? 'text-green-400' : 'text-yellow-400'}`}>
+                      🎵 Audio: {audioPlaying ? 'Playing' : 'Ready'}
+                    </p>
+                  ) : (
+                    <p className="text-red-400 text-sm">⚠️ No audio received</p>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -310,7 +406,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
                 isMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-600 hover:bg-gray-700'
               }`}
-              title={isMuted ? 'Unmute' : 'Mute'}
+              title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
             >
               {isMuted ? (
                 <MicOff className="w-6 h-6 text-white" />
@@ -356,6 +452,12 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
             >
               <PhoneOff className="w-6 h-6 text-white" />
             </button>
+          </div>
+          
+          {/* Debug info */}
+          <div className="mt-4 text-center text-xs text-gray-400">
+            Local: {hasLocalVideo ? '📹' : '❌'} Video, 🎤 Audio | 
+            Remote: {hasRemoteVideo ? '📹' : '❌'} Video, {hasRemoteAudio ? (audioPlaying ? '🔊' : '🔇') : '❌'} Audio
           </div>
         </div>
       </div>
