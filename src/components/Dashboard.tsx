@@ -25,51 +25,12 @@ const Dashboard: React.FC = () => {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [notification, setNotification] = useState<string | null>(null);
-  const [mediaDeviceStatus, setMediaDeviceStatus] = useState<{hasAudio: boolean; hasVideo: boolean} | null>(null);
   
   const showNotification = (message: string) => {
     console.log('📢 Notification:', message);
     setNotification(message);
     setTimeout(() => setNotification(null), 5000);
   };
-
-  // Check media devices and permissions on mount
-  useEffect(() => {
-    const initializeMedia = async () => {
-      try {
-        console.log('🎛️ Initializing media devices...');
-        
-        // Check available devices
-        const deviceStatus = await WebRTCService.checkMediaDevices();
-        setMediaDeviceStatus(deviceStatus);
-        
-        // Test actual access
-        const accessTest = await WebRTCService.testMediaAccess();
-        console.log('🔍 Media access test results:', accessTest);
-        
-        if (!deviceStatus.hasAudio) {
-          showNotification('⚠️ No microphone detected. Voice calls may not work.');
-        }
-        if (!deviceStatus.hasVideo) {
-          showNotification('⚠️ No camera detected. Video calls will show avatar only.');
-        }
-        
-        if (accessTest.audio && accessTest.video) {
-          showNotification('✅ Camera and microphone ready');
-        } else if (accessTest.audio) {
-          showNotification('✅ Microphone ready, camera access needed for video calls');
-        } else {
-          showNotification('⚠️ Please allow camera/microphone access for calls');
-        }
-        
-      } catch (error) {
-        console.error('❌ Error initializing media:', error);
-        showNotification('⚠️ Error checking media devices. Please refresh and allow permissions.');
-      }
-    };
-
-    initializeMedia();
-  }, []);
   
   useEffect(() => {
     if (!user) return;
@@ -78,7 +39,7 @@ const Dashboard: React.FC = () => {
     const socket = socketService.connect(user.id, user.username);
     
     socket.on('connect', () => {
-      console.log('✅ Socket connected successfully');
+      console.log('✅ Socket connected');
       setConnectionStatus('connected');
       showNotification('✅ Connected to server');
     });
@@ -92,7 +53,7 @@ const Dashboard: React.FC = () => {
     socket.on('join_success', (data) => {
       console.log('🎉 Join success:', data.onlineUsers.length, 'users online');
       setUsers(data.onlineUsers);
-      showNotification(`✅ ${data.message} (${data.onlineUsers.length} users online)`);
+      showNotification(`✅ ${data.message}`);
     });
     
     socket.on('users_updated', (onlineUsers: User[]) => {
@@ -101,22 +62,17 @@ const Dashboard: React.FC = () => {
     });
     
     socket.on('incoming_call', async (data) => {
-      console.log('📞 Incoming call received:', {
-        from: data.from.username,
-        type: data.callType,
-        hasOffer: !!data.offer
-      });
+      console.log('📞 Incoming call from:', data.from.username, 'Type:', data.callType);
       
       setIncomingCall(data);
       showNotification(`📞 Incoming ${data.callType} call from ${data.from.username}`);
       
       try {
-        // Initialize WebRTC for incoming call
         await webrtcService.initializePeerConnection();
         
-        // Set up remote stream handler BEFORE setting remote description
+        // Set up remote stream handler FIRST
         webrtcService.setOnRemoteStream((stream) => {
-          console.log('🎵 Remote stream received for incoming call:', {
+          console.log('🎵 Remote stream received (incoming call):', {
             id: stream.id,
             active: stream.active,
             audioTracks: stream.getAudioTracks().length,
@@ -127,7 +83,6 @@ const Dashboard: React.FC = () => {
         
         // Set up ICE candidate handler
         webrtcService.setOnIceCandidate((candidate) => {
-          console.log('🧊 Sending ICE candidate to caller');
           socket.emit('ice_candidate', {
             to: data.from.id,
             candidate,
@@ -147,7 +102,7 @@ const Dashboard: React.FC = () => {
     });
     
     socket.on('call_accepted', async (data) => {
-      console.log('✅ Call accepted by remote user:', data.callId);
+      console.log('✅ Call accepted:', data.callId);
       try {
         if (data.answer) {
           await webrtcService.setRemoteDescription(data.answer);
@@ -160,7 +115,7 @@ const Dashboard: React.FC = () => {
           status: 'connected'
         } : null);
         
-        showNotification('✅ Call connected successfully');
+        showNotification('✅ Call connected');
       } catch (error) {
         console.error('❌ Error handling call acceptance:', error);
         showNotification('❌ Error connecting call');
@@ -168,7 +123,7 @@ const Dashboard: React.FC = () => {
     });
     
     socket.on('call_rejected', () => {
-      console.log('❌ Call was rejected by remote user');
+      console.log('❌ Call rejected');
       setCurrentCall(null);
       webrtcService.hangup();
       setLocalStream(null);
@@ -177,7 +132,7 @@ const Dashboard: React.FC = () => {
     });
     
     socket.on('call_ended', () => {
-      console.log('📴 Call ended by remote user');
+      console.log('📴 Call ended');
       setCurrentCall(null);
       setIncomingCall(null);
       webrtcService.hangup();
@@ -187,7 +142,7 @@ const Dashboard: React.FC = () => {
     });
     
     socket.on('ice_candidate', async (data) => {
-      console.log('🧊 ICE candidate received from remote');
+      console.log('🧊 ICE candidate received');
       try {
         await webrtcService.addIceCandidate(data.candidate);
       } catch (error) {
@@ -196,7 +151,7 @@ const Dashboard: React.FC = () => {
     });
     
     socket.on('call_status', (data) => {
-      console.log('📊 Call status update:', data.status);
+      console.log('📊 Call status:', data.status);
       if (data.status === 'user_offline') {
         showNotification('❌ User is offline');
         setCurrentCall(null);
@@ -208,34 +163,13 @@ const Dashboard: React.FC = () => {
     
     return () => {
       console.log('🧹 Cleaning up socket listeners');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('join_success');
-      socket.off('users_updated');
-      socket.off('incoming_call');
-      socket.off('call_accepted');
-      socket.off('call_rejected');
-      socket.off('call_ended');
-      socket.off('ice_candidate');
-      socket.off('call_status');
+      socket.removeAllListeners();
     };
   }, [user, webrtcService]);
   
   const handleCall = async (targetUser: User, callType: 'audio' | 'video') => {
     try {
-      console.log(`📞 Initiating ${callType} call to:`, targetUser.username);
-      
-      // Check media device availability
-      const { hasAudio, hasVideo } = await WebRTCService.checkMediaDevices();
-      
-      if (!hasAudio) {
-        showNotification('❌ No microphone found. Please connect a microphone and try again.');
-        return;
-      }
-      
-      if (callType === 'video' && !hasVideo) {
-        showNotification('⚠️ No camera found - proceeding with audio-only call');
-      }
+      console.log(`📞 Starting ${callType} call to:`, targetUser.username);
       
       // Set call state immediately
       setCurrentCall({
@@ -249,9 +183,9 @@ const Dashboard: React.FC = () => {
       // Initialize WebRTC
       await webrtcService.initializePeerConnection();
       
-      // Set up remote stream handler BEFORE getting local stream
+      // Set up remote stream handler FIRST
       webrtcService.setOnRemoteStream((stream) => {
-        console.log('🎵 Remote stream received for outgoing call:', {
+        console.log('🎵 Remote stream received (outgoing call):', {
           id: stream.id,
           active: stream.active,
           audioTracks: stream.getAudioTracks().length,
@@ -262,7 +196,6 @@ const Dashboard: React.FC = () => {
       
       // Set up ICE candidate handler
       webrtcService.setOnIceCandidate((candidate) => {
-        console.log('🧊 Sending ICE candidate to callee');
         const socket = socketService.getSocket();
         if (socket) {
           socket.emit('ice_candidate', {
@@ -273,18 +206,9 @@ const Dashboard: React.FC = () => {
       });
       
       // Get local media stream
-      let stream: MediaStream;
-      try {
-        const needsVideo = callType === 'video' && hasVideo;
-        console.log(`🎥 Getting local stream - Video: ${needsVideo}, Audio: true`);
-        stream = await webrtcService.getLocalStream(needsVideo);
-        console.log('✅ Local stream obtained successfully');
-      } catch (error) {
-        console.error('❌ Failed to get local stream:', error);
-        setCurrentCall(null);
-        showNotification(`❌ ${error instanceof Error ? error.message : 'Failed to access camera/microphone'}`);
-        return;
-      }
+      console.log(`🎥 Getting local stream - Video: ${callType === 'video'}`);
+      const stream = await webrtcService.getLocalStream(callType === 'video');
+      console.log('✅ Local stream obtained');
       
       setLocalStream(stream);
       webrtcService.addLocalStream(stream);
@@ -301,7 +225,7 @@ const Dashboard: React.FC = () => {
           callType,
           offer,
         });
-        console.log('📤 Call request sent to server');
+        console.log('📤 Call request sent');
       }
     } catch (error) {
       console.error('❌ Error starting call:', error);
@@ -312,33 +236,12 @@ const Dashboard: React.FC = () => {
   
   const handleAcceptCall = async () => {
     try {
-      console.log('✅ Accepting incoming call from:', incomingCall.from.username);
-      
-      const { hasAudio, hasVideo } = await WebRTCService.checkMediaDevices();
-      
-      if (!hasAudio) {
-        showNotification('❌ No microphone found. Cannot accept call.');
-        handleRejectCall();
-        return;
-      }
-      
-      if (incomingCall.callType === 'video' && !hasVideo) {
-        showNotification('⚠️ No camera found - accepting as audio-only call');
-      }
+      console.log('✅ Accepting call from:', incomingCall.from.username);
       
       // Get local media stream
-      let stream: MediaStream;
-      try {
-        const needsVideo = incomingCall.callType === 'video' && hasVideo;
-        console.log(`🎥 Getting local stream for answer - Video: ${needsVideo}, Audio: true`);
-        stream = await webrtcService.getLocalStream(needsVideo);
-        console.log('✅ Local stream obtained for incoming call');
-      } catch (error) {
-        console.error('❌ Failed to get local stream for incoming call:', error);
-        showNotification(`❌ ${error instanceof Error ? error.message : 'Failed to access camera/microphone'}`);
-        handleRejectCall();
-        return;
-      }
+      console.log(`🎥 Getting local stream for answer - Video: ${incomingCall.callType === 'video'}`);
+      const stream = await webrtcService.getLocalStream(incomingCall.callType === 'video');
+      console.log('✅ Local stream obtained for answer');
       
       setLocalStream(stream);
       webrtcService.addLocalStream(stream);
@@ -353,7 +256,7 @@ const Dashboard: React.FC = () => {
           callId: incomingCall.callId,
           answer,
         });
-        console.log('📤 Call acceptance sent to server');
+        console.log('📤 Call acceptance sent');
       }
       
       setCurrentCall({
@@ -364,7 +267,7 @@ const Dashboard: React.FC = () => {
       });
       
       setIncomingCall(null);
-      showNotification('✅ Call accepted successfully');
+      showNotification('✅ Call accepted');
     } catch (error) {
       console.error('❌ Error accepting call:', error);
       showNotification(`❌ Failed to accept call: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -373,7 +276,7 @@ const Dashboard: React.FC = () => {
   };
   
   const handleRejectCall = () => {
-    console.log('❌ Rejecting incoming call');
+    console.log('❌ Rejecting call');
     const socket = socketService.getSocket();
     if (socket && incomingCall) {
       socket.emit('reject_call', {
@@ -387,7 +290,7 @@ const Dashboard: React.FC = () => {
   };
   
   const handleEndCall = () => {
-    console.log('📴 Ending current call');
+    console.log('📴 Ending call');
     const socket = socketService.getSocket();
     if (socket && currentCall?.id) {
       socket.emit('end_call', {
@@ -404,7 +307,7 @@ const Dashboard: React.FC = () => {
   };
   
   const handleLogout = () => {
-    console.log('👋 User logging out');
+    console.log('👋 Logging out');
     webrtcService.hangup();
     socketService.disconnect();
     logout();
@@ -446,16 +349,6 @@ const Dashboard: React.FC = () => {
                       {connectionStatus}
                     </span>
                   </div>
-                  {mediaDeviceStatus && (
-                    <div className="flex items-center space-x-2 text-xs">
-                      <span className={`px-2 py-1 rounded ${mediaDeviceStatus.hasAudio ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        🎤 {mediaDeviceStatus.hasAudio ? 'Ready' : 'None'}
-                      </span>
-                      <span className={`px-2 py-1 rounded ${mediaDeviceStatus.hasVideo ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                        📹 {mediaDeviceStatus.hasVideo ? 'Ready' : 'None'}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -506,22 +399,6 @@ const Dashboard: React.FC = () => {
                   <span className="text-sm text-gray-600">Online Users</span>
                   <span className="text-sm font-medium text-blue-600">{users.length}</span>
                 </div>
-                {mediaDeviceStatus && (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Microphone</span>
-                      <span className={`text-sm font-medium ${mediaDeviceStatus.hasAudio ? 'text-green-600' : 'text-red-600'}`}>
-                        {mediaDeviceStatus.hasAudio ? '✅ Available' : '❌ Not found'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Camera</span>
-                      <span className={`text-sm font-medium ${mediaDeviceStatus.hasVideo ? 'text-green-600' : 'text-yellow-600'}`}>
-                        {mediaDeviceStatus.hasVideo ? '✅ Available' : '⚠️ Not found'}
-                      </span>
-                    </div>
-                  </>
-                )}
               </div>
             </div>
             
@@ -557,24 +434,30 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Debug Info */}
+            {/* Stream Debug Info */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Debug Info</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Stream Status</h3>
               <div className="space-y-2 text-xs text-gray-600">
-                <div>Local Stream: {localStream ? '✅ Active' : '❌ None'}</div>
-                <div>Remote Stream: {remoteStream ? '✅ Active' : '❌ None'}</div>
+                <div className="flex justify-between">
+                  <span>Local Stream:</span>
+                  <span className={localStream ? 'text-green-600' : 'text-red-600'}>
+                    {localStream ? '✅ Active' : '❌ None'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Remote Stream:</span>
+                  <span className={remoteStream ? 'text-green-600' : 'text-red-600'}>
+                    {remoteStream ? '✅ Active' : '❌ None'}
+                  </span>
+                </div>
                 {localStream && (
-                  <div>
-                    Local Tracks: 
-                    🎤 {localStream.getAudioTracks().length} audio, 
-                    📹 {localStream.getVideoTracks().length} video
+                  <div className="text-xs">
+                    Local: 🎤 {localStream.getAudioTracks().length} audio, 📹 {localStream.getVideoTracks().length} video
                   </div>
                 )}
                 {remoteStream && (
-                  <div>
-                    Remote Tracks: 
-                    🎤 {remoteStream.getAudioTracks().length} audio, 
-                    📹 {remoteStream.getVideoTracks().length} video
+                  <div className="text-xs">
+                    Remote: 🎤 {remoteStream.getAudioTracks().length} audio, 📹 {remoteStream.getVideoTracks().length} video
                   </div>
                 )}
               </div>
@@ -594,7 +477,7 @@ const Dashboard: React.FC = () => {
       )}
       
       {/* Call Interface */}
-      {currentCall && currentCall.status === 'connected' && currentCall.otherUser && (
+      {currentCall && currentCall.status === 'connected' && (
         <CallInterface
           localStream={localStream}
           remoteStream={remoteStream}
