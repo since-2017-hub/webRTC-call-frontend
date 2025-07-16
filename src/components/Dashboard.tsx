@@ -170,9 +170,9 @@ const Dashboard: React.FC = () => {
         return;
       }
       
-      // Allow video calls even without camera (will show avatar)
       if (callType === 'video' && !hasVideo) {
-        showNotification('No camera found - will use avatar for video');
+        showNotification('No camera found');
+        return;
       }
       
       // Set call state immediately with proper otherUser
@@ -183,19 +183,7 @@ const Dashboard: React.FC = () => {
       });
       
       await webrtcService.initializePeerConnection();
-      
-      // Try to get video stream, but fallback to audio-only if no camera
-      let stream: MediaStream;
-      try {
-        stream = await webrtcService.getLocalStream(callType === 'video' && hasVideo);
-      } catch (error) {
-        console.log('📷 Camera not available, using audio-only');
-        stream = await webrtcService.getLocalStream(false);
-        if (callType === 'video') {
-          showNotification('Camera not available - using audio with avatar');
-        }
-      }
-      
+      const stream = await webrtcService.getLocalStream(callType === 'video');
       setLocalStream(stream);
       
       webrtcService.addLocalStream(stream);
@@ -239,21 +227,7 @@ const Dashboard: React.FC = () => {
     try {
       console.log('✅ Accepting call from:', incomingCall.from.username);
       
-      // Check if we have camera for video calls
-      const { hasVideo } = await WebRTCService.checkMediaDevices();
-      const needsVideo = incomingCall.callType === 'video' && hasVideo;
-      
-      let stream: MediaStream;
-      try {
-        stream = await webrtcService.getLocalStream(needsVideo);
-      } catch (error) {
-        console.log('📷 Camera not available, using audio-only');
-        stream = await webrtcService.getLocalStream(false);
-        if (incomingCall.callType === 'video') {
-          showNotification('Camera not available - using audio with avatar');
-        }
-      }
-      
+      const stream = await webrtcService.getLocalStream(incomingCall.callType === 'video');
       setLocalStream(stream);
       
       webrtcService.addLocalStream(stream);
