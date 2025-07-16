@@ -48,8 +48,8 @@ const Dashboard: React.FC = () => {
         }
 
         // Test actual media access
-        const accessTest = await WebRTCService.testMediaAccess();
-        console.log('🎛️ Media access test results:', accessTest);
+        // const accessTest = await WebRTCService.testMediaAccess();
+        // console.log('🎛️ Media access test results:', accessTest);
         
       } catch (error) {
         console.error('❌ Error checking media devices:', error);
