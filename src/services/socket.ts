@@ -1,10 +1,10 @@
 import { io, Socket } from 'socket.io-client';
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+const SOCKET_BASE_URL = import.meta.env.VITE_SOCKET_URL;
 class SocketService {
   private socket: Socket | null = null;
   
   connect(userId: string, username: string): Socket {
-    this.socket = io(API_BASE_URL);
+    this.socket = io(SOCKET_BASE_URL);
     
     this.socket.on('connect', () => {
       console.log('Connected to server');
