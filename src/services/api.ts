@@ -1,5 +1,5 @@
 import axios from "axios";
-const API_BASE_URL = "https://172.20.1.23:3001/api";
+const API_BASE_URL = `${process.env.VITE_API_URL}/api`;
 
 export interface User {
   id: string;

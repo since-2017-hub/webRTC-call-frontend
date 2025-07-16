@@ -4,7 +4,7 @@ class SocketService {
   private socket: Socket | null = null;
   
   connect(userId: string, username: string): Socket {
-    this.socket = io('https://172.20.1.23:3001');
+    this.socket = io(process.env.VITE_API_URL);
     
     this.socket.on('connect', () => {
       console.log('Connected to server');
