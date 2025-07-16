@@ -95,7 +95,12 @@ export class WebRTCService {
         if (error.name === 'NotAllowedError') {
           throw new Error('Camera/microphone access denied. Please allow permissions and try again.');
         } else if (error.name === 'NotFoundError') {
-          throw new Error('No camera or microphone found. Please check your devices.');
+          // If no camera found but we need video, try audio-only
+          if (video) {
+            console.log('📷 No camera found, falling back to audio-only');
+            return this.getLocalStream(false);
+          }
+          throw new Error('No microphone found. Please check your devices.');
         } else if (error.name === 'NotReadableError') {
           throw new Error('Camera/microphone is already in use by another application.');
         }
