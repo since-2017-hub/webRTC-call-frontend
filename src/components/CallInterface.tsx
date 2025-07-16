@@ -39,6 +39,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
 
   // Set up local video
   useEffect(() => {
+    console.log("localstream", localStream);
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
 
@@ -127,7 +128,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
       });
     }
   }, [remoteStream, callType]);
-
+  console.log(remoteStream);
   // Call duration timer
   useEffect(() => {
     const timer = setInterval(() => {
@@ -220,12 +221,12 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   return (
     <div className="fixed inset-0 bg-gray-900 z-50">
       {/* Hidden audio element for better audio handling */}
-      <audio
+      {/* <audio
         ref={remoteAudioRef}
         autoPlay
         playsInline
         style={{ display: "none" }}
-      />
+      /> */}
 
       <div className="h-full flex flex-col">
         {/* Header */}
