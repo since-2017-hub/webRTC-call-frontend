@@ -138,6 +138,20 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
 
   return (
     <div className="fixed inset-0 bg-gray-900 z-50">
+      <video
+        ref={remoteVideoRef}
+        autoPlay
+        playsInline
+        muted={false} // CRITICAL: Not muted for audio calls
+        className="hidden"
+      />
+        <video
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted={false} // CRITICAL: Not muted for audio calls
+        className="hidden"
+      />
       <div className="h-full flex flex-col">
         {/* Header */}
         <div className="bg-gray-800 px-6 py-4 flex items-center justify-between">
@@ -197,13 +211,6 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
           {callType === "audio" && (
             <>
               {/* Hidden video element for audio */}
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                muted={false} // CRITICAL: Not muted for audio calls
-                className="hidden"
-              />
 
               {/* Audio Call UI */}
               <div className="flex items-center justify-center h-full">
