@@ -10,6 +10,7 @@ export class WebRTCService {
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' }
     ],
   };
   
@@ -17,41 +18,59 @@ export class WebRTCService {
     try {
       this.peerConnection = new RTCPeerConnection(this.configuration);
       
+      // Handle ICE candidates
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate && this.onIceCandidate) {
-          console.log('🧊 ICE candidate generated');
+          console.log('🧊 Sending ICE candidate:', event.candidate.type);
           this.onIceCandidate(event.candidate);
         }
       };
       
+      // Handle remote stream - CRITICAL for audio/video
       this.peerConnection.ontrack = (event) => {
-        console.log('🎵 Remote track received:', event.track.kind, 'enabled:', event.track.enabled);
+        console.log('🎵 Remote track received:', {
+          kind: event.track.kind,
+          enabled: event.track.enabled,
+          readyState: event.track.readyState,
+          streamId: event.streams[0]?.id
+        });
+        
         if (this.onRemoteStream && event.streams[0]) {
           const stream = event.streams[0];
           
-          // Ensure all tracks are enabled
+          // Force enable all tracks
           stream.getTracks().forEach(track => {
             track.enabled = true;
-            console.log(`🔊 Remote ${track.kind} track enabled:`, track.label);
+            console.log(`✅ Remote ${track.kind} track enabled:`, track.label || 'unlabeled');
           });
           
+          // Call the callback immediately
           this.onRemoteStream(stream);
         }
       };
 
+      // Connection state monitoring
       this.peerConnection.onconnectionstatechange = () => {
-        console.log('🔗 Connection state:', this.peerConnection?.connectionState);
+        const state = this.peerConnection?.connectionState;
+        console.log('🔗 Connection state changed:', state);
+        
+        if (state === 'connected') {
+          console.log('✅ WebRTC connection established successfully');
+        } else if (state === 'failed' || state === 'disconnected') {
+          console.log('❌ WebRTC connection failed or disconnected');
+        }
       };
 
       this.peerConnection.oniceconnectionstatechange = () => {
-        console.log('🧊 ICE connection state:', this.peerConnection?.iceConnectionState);
+        const state = this.peerConnection?.iceConnectionState;
+        console.log('🧊 ICE connection state:', state);
       };
 
       this.peerConnection.onsignalingstatechange = () => {
         console.log('📡 Signaling state:', this.peerConnection?.signalingState);
       };
       
-      console.log('✅ Peer connection initialized');
+      console.log('✅ Peer connection initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize peer connection:', error);
       throw error;
@@ -60,99 +79,95 @@ export class WebRTCService {
   
   async getLocalStream(video: boolean = true): Promise<MediaStream> {
     try {
-      console.log(`🎥 Requesting media - Video: ${video}, Audio: true`);
+      console.log(`🎥 Requesting media stream - Video: ${video}, Audio: true`);
       
-      // Always stop existing stream to get fresh permissions
+      // Stop existing stream first
       if (this.localStream) {
-        this.localStream.getTracks().forEach(track => track.stop());
+        this.localStream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`🛑 Stopped existing ${track.kind} track`);
+        });
         this.localStream = null;
       }
 
-      // Request permissions first
-      await this.requestPermissions(video);
-
+      // Define media constraints
       const constraints: MediaStreamConstraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 44100
+          sampleRate: 44100,
+          channelCount: 2
         },
         video: video ? {
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 },
+          width: { min: 320, ideal: 640, max: 1280 },
+          height: { min: 240, ideal: 480, max: 720 },
           frameRate: { min: 15, ideal: 30, max: 60 },
           facingMode: 'user'
         } : false
       };
 
+      console.log('📋 Media constraints:', constraints);
+
+      // Request media stream
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Verify and enable all tracks
-      this.localStream.getTracks().forEach(track => {
-        track.enabled = true;
-        console.log(`🎤 Local ${track.kind} track enabled:`, track.label, 'ready state:', track.readyState);
+      // Verify stream quality
+      const audioTracks = this.localStream.getAudioTracks();
+      const videoTracks = this.localStream.getVideoTracks();
+      
+      console.log('📊 Stream obtained:', {
+        audioTracks: audioTracks.length,
+        videoTracks: videoTracks.length,
+        streamActive: this.localStream.active,
+        streamId: this.localStream.id
       });
       
-      console.log('✅ Media stream obtained successfully');
-      console.log('📊 Stream details:', {
-        audioTracks: this.localStream.getAudioTracks().length,
-        videoTracks: this.localStream.getVideoTracks().length,
-        active: this.localStream.active
+      // Enable and verify all tracks
+      this.localStream.getTracks().forEach(track => {
+        track.enabled = true;
+        console.log(`✅ ${track.kind} track:`, {
+          label: track.label || 'unlabeled',
+          enabled: track.enabled,
+          readyState: track.readyState,
+          settings: track.getSettings()
+        });
       });
       
       return this.localStream;
     } catch (error) {
-      console.error('❌ Error accessing media devices:', error);
+      console.error('❌ Error getting media stream:', error);
       
       if (error instanceof Error) {
-        if (error.name === 'NotAllowedError') {
-          throw new Error('Camera/microphone access denied. Please allow permissions in your browser settings and refresh the page.');
-        } else if (error.name === 'NotFoundError') {
-          if (video) {
-            console.log('📷 No camera found, trying audio-only');
-            try {
+        switch (error.name) {
+          case 'NotAllowedError':
+            throw new Error('Camera/microphone access denied. Please allow permissions and refresh.');
+          case 'NotFoundError':
+            if (video) {
+              console.log('📷 Camera not found, trying audio-only');
               return await this.getLocalStream(false);
-            } catch (audioError) {
-              throw new Error('No camera or microphone found. Please check your devices.');
             }
-          }
-          throw new Error('No microphone found. Please check your devices.');
-        } else if (error.name === 'NotReadableError') {
-          throw new Error('Camera/microphone is already in use by another application. Please close other apps and try again.');
-        } else if (error.name === 'OverconstrainedError') {
-          console.log('📷 Camera constraints too strict, trying with basic settings');
-          try {
-            const basicConstraints: MediaStreamConstraints = {
-              audio: true,
-              video: video ? true : false
-            };
-            this.localStream = await navigator.mediaDevices.getUserMedia(basicConstraints);
-            return this.localStream;
-          } catch (basicError) {
-            throw new Error('Camera/microphone constraints not supported by your device.');
-          }
+            throw new Error('No microphone found. Please connect a microphone.');
+          case 'NotReadableError':
+            throw new Error('Camera/microphone is being used by another application.');
+          case 'OverconstrainedError':
+            console.log('📷 Constraints too strict, trying basic settings');
+            try {
+              const basicConstraints: MediaStreamConstraints = {
+                audio: true,
+                video: video ? true : false
+              };
+              this.localStream = await navigator.mediaDevices.getUserMedia(basicConstraints);
+              return this.localStream;
+            } catch (basicError) {
+              throw new Error('Your device does not support the required media settings.');
+            }
+          default:
+            throw new Error(`Media access error: ${error.message}`);
         }
       }
       
-      throw new Error('Failed to access camera/microphone. Please check your permissions and try again.');
-    }
-  }
-
-  private async requestPermissions(video: boolean): Promise<void> {
-    try {
-      // Check if permissions are already granted
-      const audioPermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-      const videoPermission = video ? await navigator.permissions.query({ name: 'camera' as PermissionName }) : null;
-      
-      console.log('🔐 Permissions - Audio:', audioPermission.state, video ? 'Video:' : '', videoPermission?.state || 'N/A');
-      
-      if (audioPermission.state === 'denied' || (video && videoPermission?.state === 'denied')) {
-        throw new Error('Permissions denied. Please enable camera/microphone access in your browser settings.');
-      }
-    } catch (error) {
-      console.log('⚠️ Permission check failed, will try direct access:', error);
-      // Continue anyway - some browsers don't support permissions API
+      throw new Error('Failed to access camera/microphone. Please check permissions.');
     }
   }
   
@@ -162,14 +177,22 @@ export class WebRTCService {
     }
     
     try {
-      console.log('📞 Creating offer...');
+      console.log('📞 Creating WebRTC offer...');
+      
       const offer = await this.peerConnection.createOffer({
         offerToReceiveAudio: true,
-        offerToReceiveVideo: true
+        offerToReceiveVideo: true,
+        iceRestart: false
+      });
+      
+      console.log('📋 Offer created:', {
+        type: offer.type,
+        sdpLength: offer.sdp?.length || 0
       });
       
       await this.peerConnection.setLocalDescription(offer);
-      console.log('✅ Offer created and set as local description');
+      console.log('✅ Local description set successfully');
+      
       return offer;
     } catch (error) {
       console.error('❌ Error creating offer:', error);
@@ -183,13 +206,21 @@ export class WebRTCService {
     }
     
     try {
-      console.log('📱 Creating answer...');
+      console.log('📱 Creating WebRTC answer...');
+      
       const answer = await this.peerConnection.createAnswer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: true
       });
+      
+      console.log('📋 Answer created:', {
+        type: answer.type,
+        sdpLength: answer.sdp?.length || 0
+      });
+      
       await this.peerConnection.setLocalDescription(answer);
-      console.log('✅ Answer created and set as local description');
+      console.log('✅ Local description set for answer');
+      
       return answer;
     } catch (error) {
       console.error('❌ Error creating answer:', error);
@@ -203,7 +234,11 @@ export class WebRTCService {
     }
     
     try {
-      console.log('🔄 Setting remote description:', description.type);
+      console.log('🔄 Setting remote description:', {
+        type: description.type,
+        sdpLength: description.sdp?.length || 0
+      });
+      
       await this.peerConnection.setRemoteDescription(new RTCSessionDescription(description));
       console.log('✅ Remote description set successfully');
     } catch (error) {
@@ -219,16 +254,16 @@ export class WebRTCService {
     }
 
     if (this.peerConnection.remoteDescription === null) {
-      console.log('⚠️ Cannot add ICE candidate: remote description not set yet');
+      console.log('⚠️ Cannot add ICE candidate: remote description not set');
       return;
     }
     
     try {
       await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log('✅ ICE candidate added successfully');
+      console.log('✅ ICE candidate added:', candidate.type);
     } catch (error) {
-      console.error('⚠️ Error adding ICE candidate (non-fatal):', error);
-      // Don't throw - ICE candidates can fail normally during connection establishment
+      console.error('⚠️ Error adding ICE candidate:', error);
+      // Don't throw - ICE candidates can fail during normal operation
     }
   }
   
@@ -238,22 +273,30 @@ export class WebRTCService {
     }
     
     try {
-      console.log('➕ Adding local stream tracks to peer connection');
+      console.log('➕ Adding local stream to peer connection');
       
-      // Remove existing tracks first
-      this.peerConnection.getSenders().forEach(sender => {
+      // Remove existing senders first
+      const senders = this.peerConnection.getSenders();
+      senders.forEach(sender => {
         if (sender.track) {
+          console.log(`🗑️ Removing existing ${sender.track.kind} sender`);
           this.peerConnection!.removeTrack(sender);
         }
       });
       
-      // Add new tracks
+      // Add all tracks from the stream
       stream.getTracks().forEach(track => {
-        console.log(`📡 Adding ${track.kind} track:`, track.label, 'enabled:', track.enabled);
-        this.peerConnection!.addTrack(track, stream);
+        console.log(`📡 Adding ${track.kind} track to peer connection:`, {
+          label: track.label || 'unlabeled',
+          enabled: track.enabled,
+          readyState: track.readyState
+        });
+        
+        const sender = this.peerConnection!.addTrack(track, stream);
+        console.log(`✅ Track sender added for ${track.kind}`);
       });
       
-      console.log('✅ Local stream tracks added successfully');
+      console.log('✅ All local stream tracks added successfully');
     } catch (error) {
       console.error('❌ Error adding local stream:', error);
       throw error;
@@ -262,50 +305,61 @@ export class WebRTCService {
   
   setOnRemoteStream(callback: (stream: MediaStream) => void): void {
     this.onRemoteStream = callback;
+    console.log('📝 Remote stream callback set');
   }
   
   setOnIceCandidate(callback: (candidate: RTCIceCandidate) => void): void {
     this.onIceCandidate = callback;
+    console.log('📝 ICE candidate callback set');
   }
   
   hangup(): void {
     console.log('📴 Hanging up and cleaning up resources...');
     
     if (this.peerConnection) {
+      // Close peer connection
       this.peerConnection.close();
       this.peerConnection = null;
+      console.log('🔌 Peer connection closed');
     }
     
     if (this.localStream) {
+      // Stop all tracks
       this.localStream.getTracks().forEach(track => {
         track.stop();
-        console.log(`🛑 Stopped ${track.kind} track:`, track.label);
+        console.log(`🛑 Stopped ${track.kind} track:`, track.label || 'unlabeled');
       });
       this.localStream = null;
     }
     
+    // Clear callbacks
     this.onRemoteStream = null;
     this.onIceCandidate = null;
-    console.log('✅ Cleanup completed');
+    
+    console.log('✅ Cleanup completed successfully');
   }
 
+  // Utility methods
   static async checkMediaDevices(): Promise<{ hasAudio: boolean; hasVideo: boolean }> {
     try {
-      // First check if getUserMedia is supported
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('❌ getUserMedia not supported');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        console.error('❌ Media devices API not supported');
         return { hasAudio: false, hasVideo: false };
       }
 
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const hasAudio = devices.some(device => device.kind === 'audioinput' && device.deviceId !== 'default');
-      const hasVideo = devices.some(device => device.kind === 'videoinput' && device.deviceId !== 'default');
+      const hasAudio = devices.some(device => device.kind === 'audioinput');
+      const hasVideo = devices.some(device => device.kind === 'videoinput');
       
-      console.log('🎛️ Available devices:', {
+      console.log('🎛️ Media devices found:', {
         total: devices.length,
         audio: hasAudio,
         video: hasVideo,
-        devices: devices.map(d => ({ kind: d.kind, label: d.label || 'Unknown' }))
+        devices: devices.map(d => ({ 
+          kind: d.kind, 
+          label: d.label || 'Unknown Device',
+          deviceId: d.deviceId ? 'present' : 'missing'
+        }))
       });
       
       return { hasAudio, hasVideo };
@@ -315,13 +369,17 @@ export class WebRTCService {
     }
   }
 
-  // Test media access without creating a stream
   static async testMediaAccess(): Promise<{ audio: boolean; video: boolean }> {
     const results = { audio: false, video: false };
     
+    // Test audio access
     try {
-      // Test audio access
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioStream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          echoCancellation: true,
+          noiseSuppression: true 
+        } 
+      });
       results.audio = true;
       audioStream.getTracks().forEach(track => track.stop());
       console.log('✅ Audio access test passed');
@@ -329,9 +387,14 @@ export class WebRTCService {
       console.log('❌ Audio access test failed:', error);
     }
     
+    // Test video access
     try {
-      // Test video access
-      const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const videoStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: 640, 
+          height: 480 
+        } 
+      });
       results.video = true;
       videoStream.getTracks().forEach(track => track.stop());
       console.log('✅ Video access test passed');
@@ -340,5 +403,26 @@ export class WebRTCService {
     }
     
     return results;
+  }
+
+  // Get current stream info
+  getStreamInfo(): { local: any; remote: any } {
+    const localInfo = this.localStream ? {
+      id: this.localStream.id,
+      active: this.localStream.active,
+      audioTracks: this.localStream.getAudioTracks().length,
+      videoTracks: this.localStream.getVideoTracks().length,
+      tracks: this.localStream.getTracks().map(track => ({
+        kind: track.kind,
+        enabled: track.enabled,
+        readyState: track.readyState,
+        label: track.label
+      }))
+    } : null;
+
+    return {
+      local: localInfo,
+      remote: 'Remote stream handled by callback'
+    };
   }
 }
