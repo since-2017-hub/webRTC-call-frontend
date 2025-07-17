@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { PhoneOff, Mic, MicOff, Video, VideoOff, User } from "lucide-react";
 import { User as UserType } from "../services/api";
 import { WebRTCService } from "../services/webrtc";
+
 interface CallInterfaceProps {
   localStream: MediaStream | null;
   remoteStream: MediaStream | null;
   hasVideo: boolean;
   callType: "audio" | "video";
-  otherUser: UserType; // Required - not nullable
+  otherUser: UserType;
   onEndCall: () => void;
 }
+
 const getAvatarColor = (username: string) => {
   const colors = [
     "bg-blue-500",
@@ -55,46 +57,68 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
+  const [audioLevels, setAudioLevels] = useState({ local: false, remote: false });
 
-  // Set up local video
+  // Set up local video/audio
   useEffect(() => {
     if (localStream && localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
       console.log("📹 Local video stream set");
+      
+      // Check local audio tracks
+      const audioTracks = localStream.getAudioTracks();
+      console.log("🎤 Local audio tracks:", audioTracks.length, audioTracks.map(t => ({ label: t.label, enabled: t.enabled })));
     }
   }, [localStream]);
 
-  // Set up remote video/audio
+  // Set up remote video/audio - CRITICAL FIX
   useEffect(() => {
-    if (remoteStream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    if (remoteStream) {
+      // Set up remote video element
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+        remoteVideoRef.current.volume = 1.0;
+        remoteVideoRef.current.muted = false; // CRITICAL: Not muted so we can hear them
+        remoteVideoRef.current.autoplay = true;
+        remoteVideoRef.current.playsInline = true;
 
-      // CRITICAL: Enable audio playback
-      remoteVideoRef.current.volume = 1.0;
-      remoteVideoRef.current.muted = false;
-      remoteVideoRef.current.autoplay = true;
-
-      // Force play for audio
-      remoteVideoRef.current
-        .play()
-        .then(() => {
-          console.log("🔊 Remote audio/video playing");
-        })
-        .catch((error) => {
-          console.error("❌ Error playing remote stream:", error);
+        // Force play
+        remoteVideoRef.current.play().catch((error) => {
+          console.error("❌ Error playing remote video:", error);
         });
+      }
 
-      // Log audio tracks
-      remoteStream.getAudioTracks().forEach((track) => {
-        console.log(
-          "🎵 Remote audio track:",
-          track.label,
-          "enabled:",
-          track.enabled
-        );
+      // Set up dedicated audio element for better audio handling
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.volume = 1.0;
+        remoteAudioRef.current.muted = false; // CRITICAL: Not muted for audio
+        remoteAudioRef.current.autoplay = true;
+
+        // Force play audio
+        remoteAudioRef.current.play().then(() => {
+          console.log("🔊 Remote audio playing successfully");
+        }).catch((error) => {
+          console.error("❌ Error playing remote audio:", error);
+          // Try to play with user interaction
+          document.addEventListener('click', () => {
+            remoteAudioRef.current?.play();
+          }, { once: true });
+        });
+      }
+
+      // Log remote audio tracks
+      const audioTracks = remoteStream.getAudioTracks();
+      console.log("🎵 Remote audio tracks:", audioTracks.length, audioTracks.map(t => ({ label: t.label, enabled: t.enabled })));
+      
+      // Ensure all remote audio tracks are enabled
+      audioTracks.forEach((track, index) => {
+        track.enabled = true;
+        console.log(`🔊 Remote audio track ${index} enabled:`, track.enabled);
       });
     }
   }, [remoteStream]);
@@ -107,6 +131,19 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
 
     return () => clearInterval(timer);
   }, []);
+
+  // Monitor audio levels
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (localStream) {
+        const localAudio = localStream.getAudioTracks().some(track => track.enabled);
+        const remoteAudio = remoteStream?.getAudioTracks().some(track => track.enabled) || false;
+        setAudioLevels({ local: localAudio, remote: remoteAudio });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [localStream, remoteStream]);
 
   const toggleMute = () => {
     if (localStream) {
@@ -135,23 +172,18 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
       .toString()
       .padStart(2, "0")}`;
   };
-  console.log(remoteVideoRef, localVideoRef, "---------------");
 
   return (
     <div className="fixed inset-0 bg-gray-900 z-50">
-      {/* <video
-        ref={remoteVideoRef}
+      {/* Hidden audio element for remote audio - CRITICAL */}
+      <audio
+        ref={remoteAudioRef}
         autoPlay
         playsInline
-        muted={true} // CRITICAL: Not muted for audio calls
-        className="hidden"
+        muted={false}
+        style={{ display: 'none' }}
       />
-      <video
-        ref={localVideoRef}
-        playsInline
-        muted={false} // CRITICAL: Not muted for audio calls
-        className="hidden"
-      /> */}
+      
       <div className="h-full flex flex-col">
         {/* Header */}
         <div className="bg-gray-800 px-6 py-4 flex items-center justify-between">
@@ -166,12 +198,21 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
               </p>
             </div>
           </div>
-          <div className="text-white text-sm">
-            {callType === "video" ? "Video Call" : "Voice Call"}
+          <div className="text-white text-sm flex items-center space-x-4">
+            <span>{callType === "video" ? "Video Call" : "Voice Call"}</span>
+            {/* Audio status indicators */}
+            <div className="flex items-center space-x-2 text-xs">
+              <span className={`${audioLevels.local ? 'text-green-400' : 'text-red-400'}`}>
+                🎤 {audioLevels.local ? 'ON' : 'OFF'}
+              </span>
+              <span className={`${audioLevels.remote ? 'text-green-400' : 'text-red-400'}`}>
+                🔊 {audioLevels.remote ? 'RECV' : 'NO AUDIO'}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Video Area */}
+        {/* Video/Audio Area */}
         <div className="flex-1 relative">
           {callType === "video" && (
             <>
@@ -181,12 +222,13 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 autoPlay
                 playsInline
                 muted={false} // CRITICAL: Not muted so we can hear them
-                className="w-48 h-36 object-cover bg-gray-800"
+                className="w-full h-full object-cover bg-gray-800"
+                style={{ minHeight: '400px' }}
               />
 
               {/* Local Video (Picture-in-Picture) */}
-              {/* <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden shadow-lg">
-                {hasVideo === false ? (
+              <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden shadow-lg">
+                {!hasVideo || isVideoOff ? (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="text-center">
                       <UserAvatar username="You" size="small" />
@@ -200,36 +242,40 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                     ref={localVideoRef}
                     autoPlay
                     playsInline
-                    muted // Muted to prevent feedback
+                    muted={true} // CRITICAL: Muted to prevent audio feedback
                     className="w-full h-full object-cover"
                   />
                 )}
-              </div> */}
+              </div>
             </>
           )}
 
           {callType === "audio" && (
-            <>
-              {/* Hidden video element for audio */}
-
-              {/* Audio Call UI */}
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="w-32 h-32 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <User className="w-16 h-16 text-white" />
-                  </div>
-                  <h3 className="text-white text-xl font-medium mb-2">
-                    {otherUser.username}
-                  </h3>
-                  <p className="text-gray-300">
-                    {formatDuration(callDuration)}
-                  </p>
-                  <p className="text-gray-400 text-sm mt-2">
-                    Voice Call Active
-                  </p>
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-32 h-32 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <User className="w-16 h-16 text-white" />
+                </div>
+                <h3 className="text-white text-xl font-medium mb-2">
+                  {otherUser.username}
+                </h3>
+                <p className="text-gray-300">
+                  {formatDuration(callDuration)}
+                </p>
+                <p className="text-gray-400 text-sm mt-2">
+                  Voice Call Active
+                </p>
+                {/* Audio status for audio calls */}
+                <div className="flex items-center justify-center space-x-4 mt-4 text-xs">
+                  <span className={`${audioLevels.local ? 'text-green-400' : 'text-red-400'}`}>
+                    🎤 Your Mic: {audioLevels.local ? 'ON' : 'OFF'}
+                  </span>
+                  <span className={`${audioLevels.remote ? 'text-green-400' : 'text-red-400'}`}>
+                    🔊 Their Audio: {audioLevels.remote ? 'RECEIVING' : 'NO SIGNAL'}
+                  </span>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 

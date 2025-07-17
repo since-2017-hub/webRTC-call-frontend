@@ -28,7 +28,7 @@ export class WebRTCService {
           // Ensure audio tracks are enabled
           event.streams[0].getAudioTracks().forEach(track => {
             track.enabled = true;
-            console.log('🔊 Remote audio track enabled:', track.label);
+            console.log('🔊 Remote audio track enabled:', track.label, track.enabled);
           });
           this.onRemoteStream(event.streams[0]);
         }
@@ -69,7 +69,11 @@ export class WebRTCService {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          // Add more specific audio constraints
+          sampleRate: 44100,
+          channelCount: 1,
+          // volume: 1.0
         },
         video: video ? {
           width: { ideal: 1280 },
@@ -80,10 +84,14 @@ export class WebRTCService {
 
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
       
-      // Ensure audio tracks are enabled
+      // Ensure audio tracks are enabled and properly configured
       this.localStream.getAudioTracks().forEach(track => {
         track.enabled = true;
-        console.log('🎤 Local audio track enabled:', track.label);
+        console.log('🎤 Local audio track enabled:', track.label, track.enabled);
+        
+        // Apply additional audio settings if supported
+        const settings = track.getSettings();
+        console.log('🎵 Audio track settings:', settings);
       });
       
       console.log('✅ Media stream obtained');
@@ -180,7 +188,7 @@ export class WebRTCService {
     try {
       console.log('➕ Adding local stream tracks');
       stream.getTracks().forEach(track => {
-        console.log(`📡 Adding ${track.kind} track:`, track.label);
+        console.log(`📡 Adding ${track.kind} track:`, track.label, 'enabled:', track.enabled);
         this.peerConnection!.addTrack(track, stream);
       });
       console.log('✅ Local stream added');
@@ -231,5 +239,23 @@ export class WebRTCService {
       console.error('❌ Error checking devices:', error);
       return { hasAudio: false, hasVideo: false };
     }
+  }
+
+  // Add method to adjust audio levels
+  adjustAudioLevel(volume: number): void {
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach(track => {
+        // Note: This doesn't directly set volume, but ensures track is enabled
+        track.enabled = volume > 0;
+        console.log('🔊 Audio track enabled:', track.enabled, 'for volume:', volume);
+      });
+    }
+  }
+
+  // Add method to get audio levels for debugging
+  getAudioLevels(): { local: boolean, remote: boolean } {
+    const localAudio = this.localStream?.getAudioTracks().some(track => track.enabled) || false;
+    // Remote audio status would need to be tracked separately
+    return { local: localAudio, remote: false };
   }
 }
