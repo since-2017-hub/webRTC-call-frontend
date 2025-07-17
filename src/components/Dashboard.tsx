@@ -136,6 +136,7 @@ const Dashboard: React.FC = () => {
             candidate,
           });
         });
+        await webrtcService.setRemoteDescription(data.offer);
       } catch (error) {
         console.error("❌ Error handling incoming call:", error);
         showNotification("❌ Error handling incoming call");
