@@ -143,13 +143,13 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         ref={remoteVideoRef}
         autoPlay
         playsInline
-        muted={false} // CRITICAL: Not muted for audio calls
+        muted={true} // CRITICAL: Not muted for audio calls
         className="hidden"
       />
       <video
         ref={localVideoRef}
         playsInline
-        muted // CRITICAL: Not muted for audio calls
+        muted={false} // CRITICAL: Not muted for audio calls
         className="hidden"
       />
       <div className="h-full flex flex-col">
