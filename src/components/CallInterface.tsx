@@ -139,7 +139,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
 
   return (
     <div className="fixed inset-0 bg-gray-900 z-50">
-      <video
+      {/* <video
         ref={remoteVideoRef}
         autoPlay
         playsInline
@@ -151,7 +151,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         playsInline
         muted={false} // CRITICAL: Not muted for audio calls
         className="hidden"
-      />
+      /> */}
       <div className="h-full flex flex-col">
         {/* Header */}
         <div className="bg-gray-800 px-6 py-4 flex items-center justify-between">
@@ -180,11 +180,10 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                muted // CRITICAL: Not muted so we can hear them
-                className="w-48 h-36 object-cover bg-gray-800"
+                muted={false} // CRITICAL: Not muted so we can hear them
+                className="w-100 h-100 object-cover bg-gray-800"
               />
-
-              {/* Local Video (Picture-in-Picture) */}
+              Local Video (Picture-in-Picture)
               <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden shadow-lg">
                 {hasVideo === false ? (
                   <div className="w-full h-full flex items-center justify-center">
