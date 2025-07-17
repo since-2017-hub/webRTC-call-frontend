@@ -181,10 +181,11 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 autoPlay
                 playsInline
                 muted={false} // CRITICAL: Not muted so we can hear them
-                className="w-100 h-100 object-cover bg-gray-800"
+                className="w-48 h-36 object-cover bg-gray-800"
               />
-              Local Video (Picture-in-Picture)
-              <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden shadow-lg">
+
+              {/* Local Video (Picture-in-Picture) */}
+              {/* <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden shadow-lg">
                 {hasVideo === false ? (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="text-center">
@@ -203,7 +204,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                     className="w-full h-full object-cover"
                   />
                 )}
-              </div>
+              </div> */}
             </>
           )}
 
