@@ -84,6 +84,11 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   // Set up remote video/audio - CRITICAL FIX
   useEffect(() => {
     if (remoteStream) {
+      console.log("🎵 Setting up remote stream with tracks:", 
+        remoteStream.getVideoTracks().length, "video,", 
+        remoteStream.getAudioTracks().length, "audio"
+      );
+      
       // Set up remote video element
       const videoTracks = remoteStream.getVideoTracks();
 
@@ -99,8 +104,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
           console.error("❌ Error playing remote video:", error);
         });
       }
-      console.log(remoteStream, videoTracks, "removet Video tracks");
-      console.log(localStream, remoteVideoRef, "local Video tracks");
+      
       // Set up dedicated audio element for better audio handling
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
@@ -140,6 +144,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         track.enabled = true;
         console.log(`🔊 Remote audio track ${index} enabled:`, track.enabled);
       });
+    } else {
+      console.log("❌ No remote stream available");
     }
   }, [remoteStream, callType]);
 

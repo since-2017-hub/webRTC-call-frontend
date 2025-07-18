@@ -123,8 +123,8 @@ const Dashboard: React.FC = () => {
 
       try {
         await webrtcService.initializePeerConnection();
-        await webrtcService.setRemoteDescription(data.offer);
 
+        // Set up remote stream callback BEFORE setting remote description
         webrtcService.setOnRemoteStream((stream) => {
           console.log("🎵 Remote stream received in incoming call");
           setRemoteStream(stream);
@@ -136,7 +136,9 @@ const Dashboard: React.FC = () => {
             candidate,
           });
         });
-        // await webrtcService.setRemoteDescription(data.offer);
+        
+        // Set remote description after callbacks are set up
+        await webrtcService.setRemoteDescription(data.offer);
       } catch (error) {
         console.error("❌ Error handling incoming call:", error);
         showNotification("❌ Error handling incoming call");
@@ -185,6 +187,7 @@ const Dashboard: React.FC = () => {
     });
 
     socket.on("ice_candidate", async (data) => {
+      console.log("🧊 Received ICE candidate");
       try {
         await webrtcService.addIceCandidate(data.candidate);
       } catch (error) {
@@ -249,6 +252,22 @@ const Dashboard: React.FC = () => {
 
       await webrtcService.initializePeerConnection();
 
+      // Set up remote stream callback BEFORE getting local stream
+      webrtcService.setOnRemoteStream((stream) => {
+        console.log("🎵 Remote stream received during outgoing call");
+        setRemoteStream(stream);
+      });
+
+      webrtcService.setOnIceCandidate((candidate) => {
+        const socket = socketService.getSocket();
+        if (socket) {
+          socket.emit("ice_candidate", {
+            to: targetUser.id,
+            candidate,
+          });
+        }
+      });
+
       // Get media stream with proper error handling
       let stream: MediaStream;
       try {
@@ -270,21 +289,6 @@ const Dashboard: React.FC = () => {
 
       setLocalStream(stream);
       webrtcService.addLocalStream(stream);
-
-      // webrtcService.setOnRemoteStream((stream) => {
-      //   console.log("🎵 Remote stream received during outgoing call");
-      //   setRemoteStream(stream);
-      // });
-
-      webrtcService.setOnIceCandidate((candidate) => {
-        const socket = socketService.getSocket();
-        if (socket) {
-          socket.emit("ice_candidate", {
-            to: targetUser.id,
-            candidate,
-          });
-        }
-      });
 
       const offer = await webrtcService.createOffer();
 

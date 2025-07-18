@@ -1,7 +1,7 @@
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
-  private remoteStream: MediaStream = new MediaStream();
+  private remoteStream: MediaStream | null = null;
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onIceCandidateCallback:
     | ((candidate: RTCIceCandidate) => void)
@@ -10,6 +10,9 @@ export class WebRTCService {
   constructor() {}
 
   public async initializePeerConnection(): Promise<void> {
+    // Create a new remote stream for this connection
+    this.remoteStream = new MediaStream();
+    
     this.peerConnection = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -19,19 +22,35 @@ export class WebRTCService {
       ],
     });
 
-    // Critical: handle remote stream via ontrack
+    // Handle remote stream via ontrack
     this.peerConnection.ontrack = (event) => {
-      const [stream] = event.streams;
-      console.log("🎵 ontrack event triggered", stream.getVideoTracks());
-      // this.onRemoteStreamCallback?.(stream);
-      this.remoteStream.addTrack(event.track);
-      this.onRemoteStreamCallback?.(this.remoteStream);
+      console.log("🎵 ontrack event triggered", event.track.kind, event.track.label);
+      
+      if (this.remoteStream) {
+        // Add the track to our remote stream
+        this.remoteStream.addTrack(event.track);
+        console.log("📡 Added remote track:", event.track.kind);
+        
+        // Notify callback with the updated stream
+        if (this.onRemoteStreamCallback) {
+          this.onRemoteStreamCallback(this.remoteStream);
+        }
+      }
     };
 
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate && this.onIceCandidateCallback) {
+        console.log("🧊 ICE candidate generated");
         this.onIceCandidateCallback(event.candidate);
       }
+    };
+    
+    this.peerConnection.onconnectionstatechange = () => {
+      console.log("🔗 Connection state:", this.peerConnection?.connectionState);
+    };
+    
+    this.peerConnection.oniceconnectionstatechange = () => {
+      console.log("🧊 ICE connection state:", this.peerConnection?.iceConnectionState);
     };
   }
 
@@ -96,6 +115,10 @@ export class WebRTCService {
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
+    }
+    if (this.remoteStream) {
+      this.remoteStream.getTracks().forEach((track) => track.stop());
+      this.remoteStream = null;
     }
   }
 
