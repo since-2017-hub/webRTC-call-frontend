@@ -86,19 +86,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
     if (remoteStream) {
       // Set up remote video element
       const videoTracks = remoteStream.getVideoTracks();
-      console.log("🎥 Video Tracks:", videoTracks);
-      videoTracks.forEach((track, index) => {
-        console.log(`📹 Remote video track ${index}:`, {
-          id: track.id,
-          kind: track.kind,
-          enabled: track.enabled,
-          readyState: track.readyState,
-        });
-      });
-
-      if (videoTracks.length === 0) {
-        console.warn("❌ No video tracks in remote stream!");
-      }
+      console.log(videoTracks);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.volume = 1.0;
@@ -107,21 +95,16 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         remoteVideoRef.current.playsInline = true;
 
         // Force play
-        remoteVideoRef.current
-          .play()
-          .then(() => {
-            console.log("✅ Remote video playing");
-          })
-          .catch((error) => {
-            console.error("❌ Error playing remote video:", error);
-          });
+        remoteVideoRef.current.play().catch((error) => {
+          console.error("❌ Error playing remote video:", error);
+        });
       }
 
       // Set up dedicated audio element for better audio handling
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
         remoteAudioRef.current.volume = 1.0;
-        remoteAudioRef.current.muted = isMuted; // CRITICAL: Not muted for audio
+        remoteAudioRef.current.muted = false; // CRITICAL: Not muted for audio
         remoteAudioRef.current.autoplay = true;
 
         // Force play audio

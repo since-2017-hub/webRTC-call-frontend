@@ -1,8 +1,6 @@
-// Updated WebRTCService.ts with correct remote stream handling
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
-  private remoteStream: MediaStream = new MediaStream();
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onIceCandidateCallback: ((candidate: RTCIceCandidate) => void) | null = null;
 
@@ -16,15 +14,11 @@ export class WebRTCService {
       ],
     });
 
+    // Critical: handle remote stream via ontrack
     this.peerConnection.ontrack = (event) => {
-      console.log("📡 ontrack received:", {
-        kind: event.track.kind,
-        id: event.track.id,
-        streamIds: event.streams.map((s) => s.id),
-      });
-
-      this.remoteStream.addTrack(event.track);
-      this.onRemoteStreamCallback?.(this.remoteStream);
+      const [stream] = event.streams;
+      console.log("🎵 ontrack event triggered");
+      this.onRemoteStreamCallback?.(stream);
     };
 
     this.peerConnection.onicecandidate = (event) => {
@@ -89,7 +83,6 @@ export class WebRTCService {
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
     }
-    this.remoteStream = new MediaStream();
   }
 
   public setOnRemoteStream(callback: (stream: MediaStream) => void) {
