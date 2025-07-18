@@ -84,14 +84,27 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   // Set up remote video/audio - CRITICAL FIX
   useEffect(() => {
     if (remoteStream) {
-      console.log("🎵 Setting up remote stream with tracks:", 
-        remoteStream.getVideoTracks().length, "video,", 
-        remoteStream.getAudioTracks().length, "audio"
-      );
-      
-      // Set up remote video element
       const videoTracks = remoteStream.getVideoTracks();
-
+      const audioTracks = remoteStream.getAudioTracks();
+      
+      console.log("🎵 Setting up remote stream:", {
+        videoTracks: videoTracks.length,
+        audioTracks: audioTracks.length,
+        videoTrackDetails: videoTracks.map(t => ({
+          id: t.id,
+          label: t.label,
+          enabled: t.enabled,
+          readyState: t.readyState,
+          settings: t.getSettings()
+        })),
+        audioTrackDetails: audioTracks.map(t => ({
+          id: t.id,
+          label: t.label,
+          enabled: t.enabled,
+          readyState: t.readyState
+        }))
+      });
+      
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.volume = 1.0;
@@ -103,6 +116,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         remoteVideoRef.current.play().catch((error) => {
           console.error("❌ Error playing remote video:", error);
         });
+        
+        console.log("📹 Remote video element configured");
       }
       
       // Set up dedicated audio element for better audio handling
@@ -131,18 +146,16 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
           });
       }
 
-      // Log remote audio tracks
-      const audioTracks = remoteStream.getAudioTracks();
-      console.log(
-        "🎵 Remote audio tracks:",
-        audioTracks.length,
-        audioTracks.map((t) => ({ label: t.label, enabled: t.enabled }))
-      );
-
       // Ensure all remote audio tracks are enabled
       audioTracks.forEach((track, index) => {
         track.enabled = true;
         console.log(`🔊 Remote audio track ${index} enabled:`, track.enabled);
+      });
+      
+      // Ensure all remote video tracks are enabled
+      videoTracks.forEach((track, index) => {
+        track.enabled = true;
+        console.log(`📹 Remote video track ${index} enabled:`, track.enabled);
       });
     } else {
       console.log("❌ No remote stream available");
@@ -255,15 +268,27 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
           {callType === "video" && (
             <>
               {/* Remote Video (Main) */}
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                muted={false} // CRITICAL: Not muted so we can hear them
-                className="w-1/2 h-1/2 object-cover bg-gray-800"
-                style={{ minHeight: "300px" }}
-              />
-
+            <div className="w-full h-full bg-gray-800 flex items-center justify-center relative">
+              {remoteStream && remoteStream.getVideoTracks().length > 0 ? (
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  muted={false} // CRITICAL: Not muted so we can hear them
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-center">
+                  <UserAvatar username={otherUser.username} size="large" />
+                  <p className="text-gray-400 mt-4">
+                    {remoteStream ? "No video from caller" : "Connecting..."}
+                  </p>
+                  <p className="text-gray-500 text-sm mt-2">
+                    Video tracks: {remoteStream?.getVideoTracks().length || 0}
+                  </p>
+                </div>
+              )}
+            </div>
               {/* Local Video (Picture-in-Picture) */}
               <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden shadow-lg">
                 {!hasVideo || isVideoOff ? (

@@ -252,9 +252,12 @@ const Dashboard: React.FC = () => {
 
       await webrtcService.initializePeerConnection();
 
-      // Set up remote stream callback BEFORE getting local stream
+      // Set up callbacks BEFORE any WebRTC operations
       webrtcService.setOnRemoteStream((stream) => {
-        console.log("🎵 Remote stream received during outgoing call");
+        console.log("🎵 Remote stream received during outgoing call:", {
+          videoTracks: stream.getVideoTracks().length,
+          audioTracks: stream.getAudioTracks().length
+        });
         setRemoteStream(stream);
       });
 
@@ -272,6 +275,7 @@ const Dashboard: React.FC = () => {
       let stream: MediaStream;
       try {
         const needsVideo = callType === "video" && hasVideo;
+        console.log("🎥 Getting local stream for outgoing call, needsVideo:", needsVideo);
         stream = await webrtcService.getLocalStream(needsVideo);
         console.log("✅ Local stream obtained for outgoing call");
       } catch (error) {
@@ -288,12 +292,16 @@ const Dashboard: React.FC = () => {
       }
 
       setLocalStream(stream);
+      
+      // Add local stream to peer connection BEFORE creating offer
       webrtcService.addLocalStream(stream);
 
+      console.log("📞 Creating offer with local stream added");
       const offer = await webrtcService.createOffer();
 
       const socket = socketService.getSocket();
       if (socket) {
+        console.log("📤 Sending call offer to:", targetUser.username);
         socket.emit("call_user", {
           to: targetUser.id,
           from: user,
@@ -331,6 +339,7 @@ const Dashboard: React.FC = () => {
       let stream: MediaStream;
       try {
         const needsVideo = incomingCall.callType === "video" && hasVideo;
+        console.log("🎥 Getting local stream for incoming call, needsVideo:", needsVideo);
         stream = await webrtcService.getLocalStream(needsVideo);
         console.log("✅ Local stream obtained for incoming call");
       } catch (error) {
@@ -350,12 +359,16 @@ const Dashboard: React.FC = () => {
       }
 
       setLocalStream(stream);
+      
+      // Add local stream to peer connection BEFORE creating answer
       webrtcService.addLocalStream(stream);
 
+      console.log("📞 Creating answer with local stream added");
       const answer = await webrtcService.createAnswer();
 
       const socket = socketService.getSocket();
       if (socket) {
+        console.log("📤 Sending call answer");
         socket.emit("accept_call", {
           callId: incomingCall.callId,
           answer,
