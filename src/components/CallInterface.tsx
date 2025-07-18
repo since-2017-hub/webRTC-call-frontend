@@ -80,7 +80,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
       );
     }
   }, [localStream]);
-
+  console.log(remoteStream, "-----------------", localStream);
   // Set up remote video/audio - CRITICAL FIX
   useEffect(() => {
     if (remoteStream) {
@@ -100,7 +100,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         });
       }
       console.log(remoteStream, videoTracks, "removet Video tracks");
-      console.log(localStream, remoteVideoRef, "removet Video tracks");
+      console.log(localStream, remoteVideoRef, "local Video tracks");
       // Set up dedicated audio element for better audio handling
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
