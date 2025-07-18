@@ -141,7 +141,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
         console.log(`🔊 Remote audio track ${index} enabled:`, track.enabled);
       });
     }
-  }, [remoteStream]);
+  }, [remoteStream, callType]);
 
   // Call duration timer
   useEffect(() => {
@@ -254,8 +254,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 autoPlay
                 playsInline
                 muted={false} // CRITICAL: Not muted so we can hear them
-                className="w-full h-full object-cover bg-gray-800"
-                style={{ minHeight: "400px" }}
+                className="w-1/2 h-1/2 object-cover bg-gray-800"
+                style={{ minHeight: "300px" }}
               />
 
               {/* Local Video (Picture-in-Picture) */}

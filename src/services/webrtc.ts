@@ -1,8 +1,11 @@
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
+  private remoteStream: MediaStream = new MediaStream();
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
-  private onIceCandidateCallback: ((candidate: RTCIceCandidate) => void) | null = null;
+  private onIceCandidateCallback:
+    | ((candidate: RTCIceCandidate) => void)
+    | null = null;
 
   constructor() {}
 
@@ -11,14 +14,18 @@ export class WebRTCService {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
       ],
     });
 
     // Critical: handle remote stream via ontrack
     this.peerConnection.ontrack = (event) => {
       const [stream] = event.streams;
-      console.log("🎵 ontrack event triggered");
-      this.onRemoteStreamCallback?.(stream);
+      console.log("🎵 ontrack event triggered", stream.getVideoTracks());
+      // this.onRemoteStreamCallback?.(stream);
+      this.remoteStream.addTrack(event.track);
+      this.onRemoteStreamCallback?.(this.remoteStream);
     };
 
     this.peerConnection.onicecandidate = (event) => {
@@ -48,7 +55,8 @@ export class WebRTCService {
   }
 
   public async createOffer(): Promise<RTCSessionDescriptionInit> {
-    if (!this.peerConnection) throw new Error("Peer connection not initialized");
+    if (!this.peerConnection)
+      throw new Error("Peer connection not initialized");
 
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
@@ -56,17 +64,23 @@ export class WebRTCService {
   }
 
   public async createAnswer(): Promise<RTCSessionDescriptionInit> {
-    if (!this.peerConnection) throw new Error("Peer connection not initialized");
+    if (!this.peerConnection)
+      throw new Error("Peer connection not initialized");
 
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
     return answer;
   }
 
-  public async setRemoteDescription(desc: RTCSessionDescriptionInit): Promise<void> {
-    if (!this.peerConnection) throw new Error("Peer connection not initialized");
+  public async setRemoteDescription(
+    desc: RTCSessionDescriptionInit
+  ): Promise<void> {
+    if (!this.peerConnection)
+      throw new Error("Peer connection not initialized");
 
-    await this.peerConnection.setRemoteDescription(new RTCSessionDescription(desc));
+    await this.peerConnection.setRemoteDescription(
+      new RTCSessionDescription(desc)
+    );
   }
 
   public async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
@@ -93,7 +107,10 @@ export class WebRTCService {
     this.onIceCandidateCallback = callback;
   }
 
-  public static async checkMediaDevices(): Promise<{ hasAudio: boolean; hasVideo: boolean }> {
+  public static async checkMediaDevices(): Promise<{
+    hasAudio: boolean;
+    hasVideo: boolean;
+  }> {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const hasAudio = devices.some((d) => d.kind === "audioinput");
     const hasVideo = devices.some((d) => d.kind === "videoinput");
