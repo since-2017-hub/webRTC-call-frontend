@@ -136,7 +136,7 @@ const Dashboard: React.FC = () => {
             candidate,
           });
         });
-        await webrtcService.setRemoteDescription(data.offer);
+        // await webrtcService.setRemoteDescription(data.offer);
       } catch (error) {
         console.error("❌ Error handling incoming call:", error);
         showNotification("❌ Error handling incoming call");
@@ -271,10 +271,10 @@ const Dashboard: React.FC = () => {
       setLocalStream(stream);
       webrtcService.addLocalStream(stream);
 
-      webrtcService.setOnRemoteStream((stream) => {
-        console.log("🎵 Remote stream received during outgoing call");
-        setRemoteStream(stream);
-      });
+      // webrtcService.setOnRemoteStream((stream) => {
+      //   console.log("🎵 Remote stream received during outgoing call");
+      //   setRemoteStream(stream);
+      // });
 
       webrtcService.setOnIceCandidate((candidate) => {
         const socket = socketService.getSocket();
