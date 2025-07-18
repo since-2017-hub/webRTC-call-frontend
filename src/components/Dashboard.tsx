@@ -624,7 +624,7 @@ const Dashboard: React.FC = () => {
             callType={currentCall.type}
             otherUser={currentCall.otherUser}
             onEndCall={handleEndCall}
-            // hasVideo={mediaDeviceStatus?.hasVideo || false}
+            hasVideo={mediaDeviceStatus?.hasVideo || false}
           />
         )}
     </div>
