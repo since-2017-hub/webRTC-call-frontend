@@ -86,7 +86,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
     if (remoteStream) {
       // Set up remote video element
       const videoTracks = remoteStream.getVideoTracks();
-      console.log(videoTracks);
+
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.volume = 1.0;
@@ -99,7 +99,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
           console.error("❌ Error playing remote video:", error);
         });
       }
-
+      console.log(remoteStream, videoTracks, "removet Video tracks");
+      console.log(localStream, remoteVideoRef, "removet Video tracks");
       // Set up dedicated audio element for better audio handling
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStream;
