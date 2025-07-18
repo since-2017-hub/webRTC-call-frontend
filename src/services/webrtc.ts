@@ -118,7 +118,13 @@ export class WebRTCService {
 
     console.log("📡 Adding local stream tracks to peer connection:", {
       videoTracks: stream.getVideoTracks().length,
-      audioTracks: stream.getAudioTracks().length
+      audioTracks: stream.getAudioTracks().length,
+      videoTrackDetails: stream.getVideoTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        readyState: t.readyState
+      }))
     });
 
     stream.getTracks().forEach((track) => {
@@ -128,7 +134,8 @@ export class WebRTCService {
         label: track.label,
         enabled: track.enabled,
         readyState: track.readyState,
-        sender: sender ? 'added' : 'failed'
+        sender: sender ? 'added' : 'failed',
+        trackId: track.id
       });
     });
 
@@ -137,7 +144,9 @@ export class WebRTCService {
     console.log("📤 Current senders:", senders.map(s => ({
       track: s.track ? {
         kind: s.track.kind,
-        enabled: s.track.enabled
+        enabled: s.track.enabled,
+        id: s.track.id,
+        label: s.track.label
       } : null
     })));
   }
@@ -163,12 +172,23 @@ export class WebRTCService {
     if (!this.peerConnection)
       throw new Error("Peer connection not initialized");
 
+    // Log current senders before creating answer
+    const senders = this.peerConnection.getSenders();
+    console.log("📤 Senders before creating answer:", senders.map(s => ({
+      track: s.track ? {
+        kind: s.track.kind,
+        enabled: s.track.enabled,
+        label: s.track.label
+      } : null
+    })));
     console.log("📞 Creating answer...");
     const answer = await this.peerConnection.createAnswer();
     console.log("📞 Answer created:", {
       type: answer.type,
       hasVideo: answer.sdp?.includes('m=video'),
-      hasAudio: answer.sdp?.includes('m=audio')
+      hasAudio: answer.sdp?.includes('m=audio'),
+      videoLines: answer.sdp?.split('\n').filter(line => line.includes('video')).length || 0,
+      audioLines: answer.sdp?.split('\n').filter(line => line.includes('audio')).length || 0
     });
     
     await this.peerConnection.setLocalDescription(answer);

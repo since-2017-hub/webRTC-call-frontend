@@ -336,6 +336,7 @@ const Dashboard: React.FC = () => {
         showNotification("⚠️ No camera found - will use avatar for video call");
       }
 
+      // Get local stream FIRST
       let stream: MediaStream;
       try {
         const needsVideo = incomingCall.callType === "video" && hasVideo;
@@ -360,11 +361,16 @@ const Dashboard: React.FC = () => {
 
       setLocalStream(stream);
       
-      // Add local stream to peer connection BEFORE creating answer
+      // Add local stream to peer connection BEFORE creating answer - CRITICAL for B to send video to A
       webrtcService.addLocalStream(stream);
+      console.log("📡 Local stream added to peer connection before creating answer");
 
       console.log("📞 Creating answer with local stream added");
       const answer = await webrtcService.createAnswer();
+      console.log("📞 Answer created with local tracks:", {
+        hasVideo: answer.sdp?.includes('m=video'),
+        hasAudio: answer.sdp?.includes('m=audio')
+      });
 
       const socket = socketService.getSocket();
       if (socket) {
